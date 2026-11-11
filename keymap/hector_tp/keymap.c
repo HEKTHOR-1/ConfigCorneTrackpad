@@ -251,8 +251,8 @@ static int8_t add_i8(int8_t a, int8_t b) {
     return r > INT8_MAX ? INT8_MAX : r < INT8_MIN ? INT8_MIN : r;
 }
 
-#    define TAP_MOVE_MIN 4   // movimiento por lectura que ya cuenta como deslizar (menos es temblor del dedo)
-#    define TAP_MOVE_MS 150  // si hubo movimiento en este tiempo antes del clic, se descarta
+#    define TAP_MOVE_MIN 6   // movimiento por lectura que ya cuenta como deslizar (menos es temblor del dedo)
+#    define TAP_MOVE_MS 100  // si hubo movimiento en este tiempo antes del clic, se descarta
 
 static mouse_xy_report_t take_xy(int16_t *pending) {
     int16_t v = *pending;

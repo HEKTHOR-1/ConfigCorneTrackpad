@@ -80,9 +80,9 @@
    ~930 bytes). Hector probó el modo relativo con la franja de scroll del chip y prefirió este.
    La inercia al soltar (POINTING_DEVICE_GESTURES_CURSOR_GLIDE_ENABLE, ~1,1 KB) no cabía. */
 #define CIRQUE_PINNACLE_TAP_ENABLE
-/* Toque = clic solo si dura menos de 120 ms (por defecto el TAPPING_TERM, 180 ms): menos clics por
-   roces. keymap.c además descarta el clic si el dedo se movió justo antes (deslizamiento corto). */
-#define CIRQUE_PINNACLE_TAPPING_TERM 120
+/* Toque = clic si dura menos de 180 ms (con 120 se perdían clics; los roces los filtra keymap.c). Antes
+   120 ms. keymap.c descarta el clic si el dedo se movió justo antes (deslizamiento corto). */
+#define CIRQUE_PINNACLE_TAPPING_TERM 180
 #define POINTING_DEVICE_GESTURES_SCROLL_ENABLE
 
 /* Diagnóstico del trackpad en la pantalla izquierda: 5 números del último contacto (Z máxima, salto
