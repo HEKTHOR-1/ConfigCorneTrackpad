@@ -83,7 +83,9 @@
 /* Toque = clic si dura menos de 180 ms (con 120 se perdían clics; los roces los filtra keymap.c). Antes
    120 ms. keymap.c descarta el clic si el dedo se movió justo antes (deslizamiento corto). */
 #define CIRQUE_PINNACLE_TAPPING_TERM 180
-#define POINTING_DEVICE_GESTURES_SCROLL_ENABLE
+/* Sin scroll por la orilla: estorbaba al mover el cursor; el scroll es con Shift + girar/deslizar
+   (keymap.c). Para volver a tenerlo: descomentar. */
+// #define POINTING_DEVICE_GESTURES_SCROLL_ENABLE
 
 /* Diagnóstico del trackpad en la pantalla izquierda: 5 números del último contacto (Z máxima, salto
    máximo entre lecturas, ms, lecturas, contador). Para calibrar el clic de dos dedos. Desactivado;

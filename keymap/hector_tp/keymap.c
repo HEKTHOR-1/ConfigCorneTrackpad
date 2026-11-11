@@ -220,7 +220,9 @@ void keyboard_post_init_user(void) {
     // libre al cursor; arranque, ángulo y clics de fábrica (16 px, 50°, 18 por vuelta). Hector probó
     // 45 %/8 px/35°/24 y entraba fácil pero le quitaba libertad al cursor.
     // Solo tiene efecto en la derecha (la que tiene el trackpad).
+#    ifdef POINTING_DEVICE_GESTURES_SCROLL_ENABLE
     cirque_pinnacle_configure_circular_scroll(30, 16, 9102, 18, false);
+#    endif
 #    ifdef TRACKPAD_DIAG
     transaction_register_rpc(TRACKPAD_DIAG_KEY, trackpad_diag_slave);
 #    endif
@@ -300,8 +302,7 @@ static mouse_xy_report_t take_xy(int16_t *pending) {
     return v;
 }
 
-#    define SPIN_MIN 2   // movimiento mínimo por lectura para contar el giro (menos es temblor)
-#    define SPIN_STEP 40 // recorrido girando por cada clic de rueda
+#    define SPIN_STEP 80 // recorrido deslizando por cada clic de rueda (con 40 iba muy rápido)
 static uint8_t shift_keys; // Shift presionados (bits de mods)
 
 report_mouse_t pointing_device_task_user(report_mouse_t m) {
@@ -338,28 +339,16 @@ report_mouse_t pointing_device_task_user(report_mouse_t m) {
     if ((get_mods() & MOD_MASK_CTRL) && (got.buttons & MOUSE_BTN1)) got.buttons ^= MOUSE_BTN1 | MOUSE_BTN2;
     int8_t spin_v = 0;
     if (shift_keys) {
-        // Shift izquierdo + girar el dedo en cualquier parte = scroll (horario baja, antihorario sube): el
-        // sentido del giro sale del producto cruz entre el movimiento anterior y el actual
-        static int8_t  px, py;
+        // Shift + deslizar arriba/abajo = scroll (dedo abajo = rueda abajo; la Mac aplica su "natural")
         static int16_t spin;
-        int8_t         dx = got.x, dy = got.y; // en 4 ms el dedo no pasa de ±127
-        int16_t        d  = abs(dx) + abs(dy);
-        if (shift_keys & MOD_BIT(KC_RSFT)) { // Shift derecho: deslizar arriba/abajo (para comparar)
-            spin += dy;
-        } else if (d >= SPIN_MIN) {
-            int16_t cross = (int16_t)px * dy - (int16_t)py * dx;
-            if (cross > 0) spin += d;
-            if (cross < 0) spin -= d;
-            px = dx;
-            py = dy;
-        }
+        spin += got.y;
         if (spin >= SPIN_STEP) spin -= SPIN_STEP, spin_v = -1;
         if (spin <= -SPIN_STEP) spin += SPIN_STEP, spin_v = 1;
         if (spin_v) { // Shift + rueda en Mac = scroll horizontal: se esconde el Shift
             del_mods(MOD_MASK_SHIFT);
             send_keyboard_report();
         }
-        pend_x = pend_y = 0; // el cursor no se mueve mientras se gira
+        pend_x = pend_y = 0; // el cursor no se mueve mientras se hace scroll
     } else {
         pend_x += got.x;
         pend_y += got.y;
@@ -399,7 +388,7 @@ uint8_t mod_config(uint8_t mod) {
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-    // Shift físico: el scroll con giro lo esconde de la Mac; se devuelve con la siguiente tecla
+    // Shift físico: el scroll con Shift lo esconde de la Mac; se devuelve con la siguiente tecla
     if (keycode == KC_LSFT || keycode == KC_RSFT) {
         uint8_t bit = MOD_BIT(keycode);
         if (record->event.pressed) shift_keys |= bit; else shift_keys &= ~bit;

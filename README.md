@@ -8,7 +8,7 @@ Es una variante de mi otro Corne ([ConfigCorneV3](https://github.com/HectorManAc
 
 ## Qué hace
 
-- **Ratón**: con el trackpad de la mitad derecha **y** con teclas (mover, clics y rueda; asignables en Vial). En el trackpad: **tocar = clic** y **scroll girando por la orilla del círculo** (siempre vertical: horario baja, antihorario sube; se decide al apoyar el dedo en la orilla y se sale al levantarlo). **Ctrl + toque = clic derecho**. Con **Shift izquierdo + girar el dedo en cualquier parte** = scroll (horario baja); con **Shift derecho + deslizar arriba/abajo** = scroll (el cursor se queda quieto y el Shift no llega a la Mac). Las velocidades de las teclas de ratón son fijas en el firmware.
+- **Ratón**: con el trackpad de la mitad derecha **y** con teclas (mover, clics y rueda; asignables en Vial). En el trackpad: **tocar = clic**, **Ctrl + toque = clic derecho** y **Shift + deslizar arriba/abajo = scroll** (el cursor se queda quieto y el Shift no llega a la Mac). Sin Shift todo el trackpad mueve el cursor (se quitó el scroll por la orilla). Las velocidades de las teclas de ratón son fijas en el firmware.
 - **Layout por defecto**: el de `corneactual.vil` (mi config actual de Vial): cada flasheo arranca ya con esas teclas. La tecla *Swap Alt/GUI* (`AG_TOGG`, capa 2) está hecha a mano porque la de QMK no cabe: funciona igual pero se reinicia al desconectar.
 - **Vial**: 4 capas editables en [vial.rocks](https://vial.rocks) (Chrome/Edge) y luces en *Lighting*. No tiene la pestaña *QMK Settings* (no cabía junto al trackpad).
 - **Multimedia**: volumen, play/pausa, siguiente/anterior.
