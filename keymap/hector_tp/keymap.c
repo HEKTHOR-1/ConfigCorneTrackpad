@@ -80,8 +80,6 @@ void set_autoshift_timeout(uint16_t timeout) {}
 #    define MOUSE_REDRAW_MS 120 // en modo ratón, menos: cada envío a la OLED retrasa los reportes del cursor
 #    define LOG_LEN 5
 #    define LOG_X 6        // la H en negrita mide 19 px; centrada en 32
-#    define H_GAP 43       // separación entre H (22 px de alto): 3 visibles a la vez
-#    define H_SLOTS 4      // posiciones dibujadas (3 visibles + la que entra/sale)
 #    define IDLE_MS 5000    // tiempo sin teclear para volver a la H
 #    define MOUSE_MS 1500   // tiempo que siguen las flechas tras soltar el ratón
 #    define LANE_LEN 6      // flechas en pantalla (+1 que sale por arriba)
@@ -264,6 +262,10 @@ static mouse_xy_report_t take_xy(int16_t *pending) {
     return v;
 }
 
+#    define SPIN_MIN 2   // movimiento mínimo por lectura para contar el giro (menos es temblor)
+#    define SPIN_STEP 40 // recorrido girando por cada clic de rueda
+static uint8_t shift_keys; // Shift presionados (bits de mods)
+
 report_mouse_t pointing_device_task_user(report_mouse_t m) {
     if (!is_keyboard_master()) {
 #    ifdef TRACKPAD_DIAG
@@ -293,13 +295,40 @@ report_mouse_t pointing_device_task_user(report_mouse_t m) {
     static int16_t  pend_x, pend_y;
     static uint8_t  tp_prev_buttons;
     tp_acc_t        got = {0};
-    if (transaction_rpc_exec(TRACKPAD_KEY, 0, NULL, sizeof(got), &got)) {
+    transaction_rpc_exec(TRACKPAD_KEY, 0, NULL, sizeof(got), &got);
+    // Ctrl + toque = clic derecho
+    if ((get_mods() & MOD_MASK_CTRL) && (got.buttons & MOUSE_BTN1)) got.buttons ^= MOUSE_BTN1 | MOUSE_BTN2;
+    int8_t spin_v = 0;
+    if (shift_keys) {
+        // Shift izquierdo + girar el dedo en cualquier parte = scroll (horario baja, antihorario sube): el
+        // sentido del giro sale del producto cruz entre el movimiento anterior y el actual
+        static int8_t  px, py;
+        static int16_t spin;
+        int8_t         dx = got.x, dy = got.y; // en 4 ms el dedo no pasa de ±127
+        int16_t        d  = abs(dx) + abs(dy);
+        if (shift_keys & MOD_BIT(KC_RSFT)) { // Shift derecho: deslizar arriba/abajo (para comparar)
+            spin += dy;
+        } else if (d >= SPIN_MIN) {
+            int16_t cross = (int16_t)px * dy - (int16_t)py * dx;
+            if (cross > 0) spin += d;
+            if (cross < 0) spin -= d;
+            px = dx;
+            py = dy;
+        }
+        if (spin >= SPIN_STEP) spin -= SPIN_STEP, spin_v = -1;
+        if (spin <= -SPIN_STEP) spin += SPIN_STEP, spin_v = 1;
+        if (spin_v) { // Shift + rueda en Mac = scroll horizontal: se esconde el Shift
+            del_mods(MOD_MASK_SHIFT);
+            send_keyboard_report();
+        }
+        pend_x = pend_y = 0; // el cursor no se mueve mientras se gira
+    } else {
         pend_x += got.x;
         pend_y += got.y;
     }
     m.x       = take_xy(&pend_x);
     m.y       = take_xy(&pend_y);
-    m.v       = got.v;
+    m.v       = got.v + spin_v;
     m.h       = got.h;
     m.buttons = (m.buttons & ~tp_prev_buttons) | got.buttons; // los de las teclas de ratón se respetan
     tp_prev_buttons = got.buttons;
@@ -322,7 +351,23 @@ report_mouse_t pointing_device_task_user(report_mouse_t m) {
     return m;
 }
 
+// Sin MAGIC no se intercambian teclas (Caps/Ctrl, Alt/⌘...): estas versiones vacías reemplazan a las de
+// QMK (~400 bytes) para que quepa la animación. El intercambio Alt/⌘ (AG_TOGG) se hace abajo a mano.
+uint16_t keycode_config(uint16_t keycode) {
+    return keycode;
+}
+uint8_t mod_config(uint8_t mod) {
+    return mod;
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // Shift físico: el scroll con giro lo esconde de la Mac; se devuelve con la siguiente tecla
+    if (keycode == KC_LSFT || keycode == KC_RSFT) {
+        uint8_t bit = MOD_BIT(keycode);
+        if (record->event.pressed) shift_keys |= bit; else shift_keys &= ~bit;
+    } else if (record->event.pressed && shift_keys) {
+        add_mods(shift_keys);
+    }
     // AG_TOGG hecho a mano (MAGIC_ENABLE no cabe): intercambia Alt y ⌘ hasta desconectar
     static bool ag_swap;
     if (keycode == AG_TOGG) {
@@ -385,19 +430,14 @@ static void kanji_cols(uint8_t seed, uint8_t *cols) {
 
 // Dibuja 5 columnas al triple de tamaño con la esquina en (x0, y0). En negrita cada columna se
 // funde con la anterior y los puntos son de 4x4 (19x22); si no, puntos de 3x3 (15x21).
-static void draw_cols(const uint8_t *cols, uint8_t x0, int16_t y0, bool bold) {
-    uint8_t dot  = bold ? 4 : 3;
-    uint8_t prev = 0;
-    for (uint8_t col = 0; col < 6; col++) {
-        uint8_t cur  = col < 5 ? cols[col] : 0;
-        uint8_t bits = bold ? cur | prev : cur;
-        prev         = cur;
+static void draw_cols(const uint8_t *cols, uint8_t x0, int16_t y0) {
+    for (uint8_t col = 0; col < 5; col++) {
         for (uint8_t row = 0; row < 7; row++) {
-            if (!(bits & (1 << row))) continue;
-            for (uint8_t dy = 0; dy < dot; dy++) {
+            if (!(cols[col] & (1 << row))) continue;
+            for (uint8_t dy = 0; dy < 3; dy++) {
                 int16_t y = y0 + row * 3 + dy;
                 if (y < 0 || y >= 128) continue;
-                for (uint8_t dx = 0; dx < dot; dx++) oled_write_pixel(x0 + col * 3 + dx, y, true);
+                for (uint8_t dx = 0; dx < 3; dx++) oled_write_pixel(x0 + col * 3 + dx, y, true);
             }
         }
     }
@@ -411,13 +451,41 @@ static void render_sym(uint8_t sym, int16_t y0) {
     } else {
         memcpy_P(cols, glyphs[sym], 5);
     }
-    draw_cols(cols, LOG_X + 2, y0, false);
+    draw_cols(cols, LOG_X + 2, y0);
 }
 
-static void render_h(int16_t y0) {
-    uint8_t cols[5];
-    memcpy_P(cols, glyphs[G_H], 5);
-    draw_cols(cols, LOG_X, y0, true);
+// Reposo: una H sólida que gira en 3D sobre su eje vertical (como una moneda) y flota subiendo y
+// bajando. Cada fila de la H es 1 o 2 tramos; se proyecta la cara de enfrente (sólida) y la de atrás
+// desplazada según el giro (punteada), y lo de en medio se ve como el grosor.
+static void hline(int8_t a, int8_t b, uint8_t y, bool dither) {
+    if (a > b) {
+        int8_t t = a;
+        a        = b;
+        b        = t;
+    }
+    for (int8_t x = a; x <= b; x++) {
+        if (!dither || ((x ^ y) & 1)) oled_write_pixel(x, y, true);
+    }
+}
+
+static void render_spin_h(uint8_t f) {
+    uint8_t ang = f * 4;                       // una vuelta cada 64 cuadros (~3,8 s)
+    int8_t  c   = cos8(ang) - 128;             // ancho aparente (negativo = de espaldas)
+    int8_t  sh  = (6 * (sin8(ang) - 128)) >> 7;  // grosor visible (±6 px)
+    uint8_t y0  = 14 + ((int8_t)(sin8(f * 2) - 128) >> 4); // flota ±8 px
+    for (uint8_t r = 0; r < 100; r++) {
+        bool cross = r >= 44 && r < 56;
+        for (uint8_t seg = 0; seg < 2; seg++) {
+            int8_t a = seg ? 6 : -15, b = seg ? 15 : -6; // las dos barras
+            if (cross) {
+                if (seg) break;
+                b = 15; // travesaño: de lado a lado
+            }
+            int8_t fa = 16 + ((a * c) >> 7), fb = 16 + ((b * c) >> 7);
+            hline(fa + sh, fb + sh, y0 + r, true); // cara de atrás y grosor
+            hline(fa, fb, y0 + r, false);           // cara de enfrente
+        }
+    }
 }
 
 #    ifdef TRACKPAD_DIAG
@@ -426,14 +494,17 @@ static void render_h(int16_t y0) {
 // Z máxima (fuerza/área, 0-63), salto máximo de posición entre lecturas, duración (ms),
 // lecturas y un contador de contactos (para saber que se actualizó).
 extern pinnacle_data_t cirque_last_touch;
-static uint16_t        diag_result[5];
+static uint8_t         diag_result[5]; // valores cortos: salto y ms van /4 para que quepan en un byte
 
 // Se llama en la derecha después de cada lectura del driver
 static void trackpad_diag_task(void) {
-    static uint16_t t_start, jmax, px, py, n, count;
+    static uint16_t t_start, jmax, px, py, n;
     static uint8_t  zmax;
+    static uint8_t  live;
     pinnacle_data_t t = cirque_last_touch;
+    diag_result[4]    = ++live; // en vivo: cuenta llamadas (prueba que la derecha corre esto)
     if (!t.valid) return;
+    diag_result[3] = t.zValue; // en vivo: Z de la última lectura
     if (t.touchDown) {
         if (!n) {
             t_start = timer_read();
@@ -447,7 +518,8 @@ static void trackpad_diag_task(void) {
         if (t.zValue > zmax) zmax = t.zValue;
         n++;
     } else if (n) {
-        uint16_t r[5] = {zmax, jmax, timer_elapsed(t_start), n, ++count};
+        uint16_t ms   = timer_elapsed(t_start);
+        uint8_t  r[3] = {zmax, jmax > 1020 ? 255 : jmax / 4, ms > 1020 ? 255 : ms / 4};
         ATOMIC_BLOCK_FORCEON { memcpy(diag_result, r, sizeof(r)); }
         n = 0;
     }
@@ -476,11 +548,13 @@ static void render_number(uint16_t v, uint8_t y0) {
 }
 
 static void render_trackpad_diag(void) {
-    uint16_t r[5] = {0};
-    bool     ok   = transaction_rpc_exec(TRACKPAD_DIAG_KEY, 0, NULL, sizeof(r), r);
+    static uint8_t fails;
+    uint8_t        r[5] = {0};
+    bool           ok   = transaction_rpc_exec(TRACKPAD_DIAG_KEY, 0, NULL, sizeof(r), r);
     oled_clear();
-    if (!ok) {
-        render_sym(G_MINUS, 6);
+    if (!ok) { // X y cuántas veces falló la comunicación con la derecha
+        render_sym(G_X, 6);
+        render_number(++fails, 30);
         return;
     }
     for (uint8_t i = 0; i < 5; i++) render_number(r[i], 4 + i * 24);
@@ -498,7 +572,7 @@ bool oled_task_user(void) {
     if (!started) { // señal inmediata: si la pantalla sigue en blanco, la izquierda no llega aquí
         started = true;
         oled_clear();
-        render_sym(G_MINUS, 6);
+        render_sym(G_STAR, 6);
     }
     if (is_keyboard_master() && timer_elapsed(diag_timer) > 200) {
         diag_timer = timer_read();
@@ -507,8 +581,7 @@ bool oled_task_user(void) {
     return false;
 #    endif
     static uint16_t timer;
-    static uint8_t  scroll, turn, h_off;
-    static uint8_t  cipher[H_SLOTS]; // cuadros que le quedan cifrada a cada H (0 = H)
+    static uint8_t  scroll, turn, frame;
 
     if (mouse_active && !mouse_state && timer_elapsed(mouse_timer) > MOUSE_MS) {
         mouse_active = false;
@@ -549,24 +622,8 @@ bool oled_task_user(void) {
 
     log_dirty = false;
     if (!typing) {
-        // La columna sube 1 px por cuadro; al salir una H por arriba entra otra cifrada por abajo
-        if (++h_off >= H_GAP) {
-            h_off = 0;
-            memmove(&cipher[0], &cipher[1], H_SLOTS - 1);
-            cipher[H_SLOTS - 1] = 10 + (next_random() & 31); // se descifra en 0,6-2,5 s
-        }
-        uint8_t r = next_random();
-        if (r < 6) cipher[r & 3] = 4 + (r & 7); // a veces una H se vuelve a cifrar un instante
         oled_clear();
-        for (uint8_t i = 0; i < H_SLOTS; i++) {
-            int16_t y = 4 + i * H_GAP - h_off;
-            if (cipher[i]) {
-                cipher[i]--;
-                render_sym(KANJI | (next_random() & 0x3F), y);
-            } else {
-                render_h(y);
-            }
-        }
+        render_spin_h(frame++);
         return false;
     }
 

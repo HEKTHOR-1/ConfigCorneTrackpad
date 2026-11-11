@@ -69,7 +69,6 @@
    los bordes y recalibra al arrancar. Si aún suelta el dedo, probar además
    #define CIRQUE_PINNACLE_ATTENUATION EXTREG__TRACK_ADCCONFIG__ADC_ATTENUATE_1X (la máxima). */
 #define CIRQUE_PINNACLE_CURVED_OVERLAY
-#define CIRQUE_PINNACLE_EXPORT_TOUCH // cambio local del driver: deja el último dato crudo en cirque_last_touch
 /* Sensibilidad al tacto: con la cubierta curva el driver usa 2X y detectaba el dedo casi sin tocar;
    con 4X (la de fábrica para cubierta plana) soltaba el dedo a mitad del trazo. 3X es el punto medio.
    Si aún detecta de más, probar 4X; si vuelve a soltar el dedo, regresar a 2X. */
@@ -90,3 +89,6 @@
    máximo entre lecturas, ms, lecturas, contador). Para calibrar el clic de dos dedos. Desactivado;
    descomentar solo para medir (reemplaza la animación y puede dar tirones al cursor). */
 // #define TRACKPAD_DIAG
+#ifdef TRACKPAD_DIAG
+#    define CIRQUE_PINNACLE_EXPORT_TOUCH // cambio local del driver: deja el último dato crudo en cirque_last_touch
+#endif
