@@ -159,10 +159,48 @@ static void mouse_set(uint8_t state) {
     mouse_timer  = timer_read();
 }
 
+// Ondas al escribir: cada tecla lanza un anillo blanco que se expande desde su LED y se desvanece,
+// encima del efecto elegido en Vial (en reposo solo se ve ese efecto)
+#    define WAVES 4         // ondas a la vez
+#    define WAVE_MS 600     // duración de cada onda
+#    define WAVE_WIDTH 14   // grosor del anillo (unidades de posición de LED: 224x64 en todo el teclado)
+#    define SYNC_WAVE 0xC0  // mensaje a la derecha: SYNC_WAVE | LED de la tecla
+static uint8_t  wave_led[WAVES];
+static uint16_t wave_time[WAVES];
+static uint8_t  wave_next;
+
+static void wave_add(uint8_t led) {
+    wave_led[wave_next]  = led;
+    wave_time[wave_next] = timer_read(); // 0 = libre
+    wave_next            = (wave_next + 1) % WAVES;
+}
+
+bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    for (uint8_t w = 0; w < WAVES; w++) {
+        if (!wave_time[w]) continue;
+        uint16_t age = timer_elapsed(wave_time[w]);
+        if (age >= WAVE_MS) {
+            wave_time[w] = 0;
+            continue;
+        }
+        uint8_t radius = age / 4;                                                  // 150 de recorrido
+        uint8_t v      = rgb_matrix_get_val() >> (age >> 7); // se desvanece: mitad de brillo cada 128 ms
+        led_point_t c  = g_led_config.point[wave_led[w]];
+        for (uint8_t i = led_min; i < led_max; i++) {
+            led_point_t p = g_led_config.point[i];
+            uint8_t     d = abs(p.x - c.x) + abs(p.y - c.y) * 2; // filas más separadas que columnas
+            if (abs(d - radius) < WAVE_WIDTH) rgb_matrix_set_color(i, v, v, v);
+        }
+    }
+    return false;
+}
+
 // La mitad derecha recibe cada símbolo desde la izquierda por el cable TRRS
 static void sync_key_slave_handler(uint8_t in_len, const void *in, uint8_t out_len, void *out) {
     uint8_t msg = *(const uint8_t *)in;
-    if (msg & SYNC_MOUSE) {
+    if (msg >= SYNC_WAVE) {
+        wave_add(msg & ~SYNC_WAVE);
+    } else if (msg & SYNC_MOUSE) {
         mouse_set(msg & ~SYNC_MOUSE);
     } else {
         log_push(msg);
@@ -393,6 +431,12 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         return true;
     }
     if (!record->event.pressed) return true;
+    uint8_t led = g_led_config.matrix_co[record->event.key.row][record->event.key.col];
+    if (led != NO_LED) {
+        wave_add(led);
+        uint8_t msg = SYNC_WAVE | led;
+        transaction_rpc_send(SYNC_KEY, 1, &msg);
+    }
     switch (keycode) {
         case KC_MPLY: log_send(G_PLAY); break;
         case KC_MNXT: case KC_MFFD: log_send(G_NEXT); break;
