@@ -339,9 +339,10 @@ report_mouse_t pointing_device_task_user(report_mouse_t m) {
     if ((get_mods() & MOD_MASK_CTRL) && (got.buttons & MOUSE_BTN1)) got.buttons ^= MOUSE_BTN1 | MOUSE_BTN2;
     int8_t spin_v = 0;
     if (shift_keys) {
-        // Shift + deslizar arriba/abajo = scroll (dedo abajo = rueda abajo; la Mac aplica su "natural")
+        // Shift + deslizar arriba/abajo = scroll, en el sentido del trackpad de la Mac (Hector lo pidió
+        // así: con "dedo abajo = rueda abajo" lo sentía al revés)
         static int16_t spin;
-        spin += got.y;
+        spin -= got.y;
         if (spin >= SPIN_STEP) spin -= SPIN_STEP, spin_v = -1;
         if (spin <= -SPIN_STEP) spin += SPIN_STEP, spin_v = 1;
         if (spin_v) { // Shift + rueda en Mac = scroll horizontal: se esconde el Shift
