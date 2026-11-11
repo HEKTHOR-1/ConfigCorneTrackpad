@@ -4,7 +4,7 @@ Firmware Vial personalizado para mi Corne con trackpad: PCB **Corne Chocolate v2
 
 Es una variante de mi otro Corne ([ConfigCorneV3](https://github.com/HectorManAc/ConfigCorneV3)): misma pantalla, luces y privacidad, más el trackpad.
 
-> **Estado:** funcionando en el teclado. El trackpad va por I2C en los pines de la pantalla de la mitad derecha (esa mitad no tiene pantalla). Tocar = clic y scroll por la orilla recién añadidos, pendientes de probar.
+> **Estado:** funcionando en el teclado. El trackpad va por I2C en los pines de la pantalla de la mitad derecha (esa mitad no tiene pantalla).
 
 ## Qué hace
 
