@@ -27,7 +27,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         { KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS},
         {   KC_NO,    KC_NO,    KC_NO,  KC_TRNS,  KC_TRNS,  KC_TRNS},
         { KC_TRNS,  KC_TRNS,  KC_TRNS,  MS_BTN2,  KC_TRNS,  KC_TRNS},
-        { KC_TRNS,  KC_TRNS,  MS_ACL1,  MS_ACL2,  MS_BTN1,  MS_BTN3},
+        { KC_TRNS,  MS_ACL0,  MS_ACL1,  MS_ACL2,  MS_BTN1,  MS_BTN3},
         { KC_TRNS,  KC_TRNS,  MS_WHLR,  MS_WHLU,  MS_WHLD,  MS_WHLL},
         {   KC_NO,    KC_NO,    KC_NO,  KC_TRNS,  KC_TRNS,  KC_TRNS}
     },
@@ -37,19 +37,19 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         { KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_VOLD},
         {   KC_NO,    KC_NO,    KC_NO,  KC_TRNS,  KC_TRNS,  KC_TRNS},
         { KC_TRNS,     KC_0,     KC_9,     KC_8,     KC_7,     KC_6},
-        { KC_TRNS,  KC_TRNS, KC_RIGHT,    KC_UP,  KC_DOWN,  KC_LEFT},
-        { KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS},
+        {KC_EQUAL, KC_MINUS, KC_RIGHT,    KC_UP,  KC_DOWN,  KC_LEFT},
+        { AG_TOGG,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS},
         {   KC_NO,    KC_NO,    KC_NO,  KC_TRNS,  KC_TRNS,  KC_TRNS}
     },
     [3] = {
-        { QK_BOOT,    KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO},
-        { RM_TOGG,  RM_HUEU,    KC_NO,  RM_VALU,    KC_NO,    KC_NO},
-        {   KC_NO,  RM_HUED,    KC_NO,  RM_VALD,    KC_NO,    KC_NO},
-        {   KC_NO,    KC_NO,    KC_NO,  KC_LGUI,  KC_TRNS,   KC_SPC},
-        {   KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO},
-        {   KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO},
-        {   KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO,    KC_NO},
-        {   KC_NO,    KC_NO,    KC_NO,  KC_RALT,  KC_TRNS,   KC_ENT}
+        { KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS},
+        { KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS},
+        { KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS},
+        {   KC_NO,    KC_NO,    KC_NO,  KC_TRNS,  KC_TRNS,  KC_TRNS},
+        { KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS},
+        { KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS},
+        { KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS,  KC_TRNS},
+        {   KC_NO,    KC_NO,    KC_NO,  KC_TRNS,  KC_TRNS,  KC_TRNS}
     }
 };
 
@@ -174,6 +174,7 @@ static void sync_key_slave_handler(uint8_t in_len, const void *in, uint8_t out_l
 static void trackpad_slave_handler(uint8_t in_len, const void *in, uint8_t out_len, void *out);
 #    ifdef TRACKPAD_DIAG
 static void trackpad_diag_slave(uint8_t in_len, const void *in, uint8_t out_len, void *out);
+static void trackpad_diag_task(void);
 #    endif
 
 void keyboard_post_init_user(void) {
@@ -265,6 +266,9 @@ static mouse_xy_report_t take_xy(int16_t *pending) {
 
 report_mouse_t pointing_device_task_user(report_mouse_t m) {
     if (!is_keyboard_master()) {
+#    ifdef TRACKPAD_DIAG
+        trackpad_diag_task();
+#    endif
         // Derecha: el driver da clic a cualquier contacto corto, aunque el dedo se haya movido; si
         // hubo movimiento en los últimos TAP_MOVE_MS no es un toque sino un deslizamiento corto
         static uint16_t moved_timer;
@@ -319,6 +323,17 @@ report_mouse_t pointing_device_task_user(report_mouse_t m) {
 }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // AG_TOGG hecho a mano (MAGIC_ENABLE no cabe): intercambia Alt y ⌘ hasta desconectar
+    static bool ag_swap;
+    if (keycode == AG_TOGG) {
+        if (record->event.pressed) ag_swap = !ag_swap;
+        return false;
+    }
+    if (ag_swap && (keycode == KC_LALT || keycode == KC_LGUI || keycode == KC_RALT || keycode == KC_RGUI)) {
+        uint8_t swapped = keycode ^ 1; // LALT 0xE2 <-> LGUI 0xE3, RALT 0xE6 <-> RGUI 0xE7
+        if (record->event.pressed) register_code(swapped); else unregister_code(swapped);
+        return false;
+    }
     if (IS_MOUSE_KEYCODE(keycode)) {
         uint8_t bit;
         switch (keycode) {
@@ -406,50 +421,74 @@ static void render_h(int16_t y0) {
 }
 
 #    ifdef TRACKPAD_DIAG
-// Diagnóstico temporal: la derecha (sin pantalla) revisa su bus I2C y se lo cuenta a la izquierda,
-// que lo muestra en vez de la animación: símbolo arriba (★ trackpad iniciado, + algo responde en la
-// dirección del Cirque pero no se inició, X nada responde, − no hay respuesta por el TRRS) y un
-// cuadrito por cada dispositivo I2C que vea la derecha.
-extern bool    touchpad_init;
-static uint8_t diag_result[3]; // [dispositivos I2C, responde en la dirección del Cirque, driver iniciado]
+// Diagnóstico temporal para calibrar el clic de dos dedos: la derecha mide cada contacto con los
+// datos crudos del Cirque y la izquierda muestra el último en 5 números, de arriba abajo:
+// Z máxima (fuerza/área, 0-63), salto máximo de posición entre lecturas, duración (ms),
+// lecturas y un contador de contactos (para saber que se actualizó).
+extern pinnacle_data_t cirque_last_touch;
+static uint16_t        diag_result[5];
 
-// La derecha escanea en su bucle normal (no dentro de la comunicación con la izquierda, que corre
-// en una interrupción donde los tiempos de espera de I2C no avanzan y un bus atascado la colgaría)
+// Se llama en la derecha después de cada lectura del driver
 static void trackpad_diag_task(void) {
-    static uint16_t scan_timer;
-    if (is_keyboard_master() || timer_elapsed(scan_timer) < 1000) return;
-    scan_timer     = timer_read();
-    uint8_t n      = 0;
-    for (uint8_t a = 0x08; a < 0x78; a++) {
-        if (i2c_ping_address(a << 1, 5) == I2C_STATUS_SUCCESS) n++;
+    static uint16_t t_start, jmax, px, py, n, count;
+    static uint8_t  zmax;
+    pinnacle_data_t t = cirque_last_touch;
+    if (!t.valid) return;
+    if (t.touchDown) {
+        if (!n) {
+            t_start = timer_read();
+            zmax = jmax = 0;
+        } else {
+            uint16_t j = abs((int16_t)(t.xValue - px)) + abs((int16_t)(t.yValue - py));
+            if (j > jmax) jmax = j;
+        }
+        px = t.xValue;
+        py = t.yValue;
+        if (t.zValue > zmax) zmax = t.zValue;
+        n++;
+    } else if (n) {
+        uint16_t r[5] = {zmax, jmax, timer_elapsed(t_start), n, ++count};
+        ATOMIC_BLOCK_FORCEON { memcpy(diag_result, r, sizeof(r)); }
+        n = 0;
     }
-    diag_result[0] = n;
-    diag_result[1] = i2c_ping_address(CIRQUE_PINNACLE_ADDR << 1, 5) == I2C_STATUS_SUCCESS;
-    diag_result[2] = touchpad_init;
 }
 
 static void trackpad_diag_slave(uint8_t in_len, const void *in, uint8_t out_len, void *out) {
     memcpy(out, diag_result, sizeof(diag_result));
 }
 
-static void render_trackpad_diag(void) {
-    uint8_t r[3] = {0};
-    bool    ok   = transaction_rpc_exec(TRACKPAD_DIAG_KEY, 0, NULL, sizeof(r), r);
-    oled_clear();
-    render_sym(!ok ? G_MINUS : r[2] ? G_STAR : r[1] ? G_PLUS : G_X, 6);
-    for (uint8_t i = 0; ok && i < r[0] && i < 6; i++) {
-        for (uint8_t y = 0; y < 8; y++) {
-            for (uint8_t x = 0; x < 10; x++) oled_write_pixel(11 + x, 40 + i * 14 + y, true);
+// Dígitos 3x5 (3 bits por fila, de arriba abajo), dibujados al doble
+static const uint16_t PROGMEM digits[10] = {0x7B6F, 0x2C97, 0x73E7, 0x73CF, 0x5BC9, 0x79CF, 0x79EF, 0x7249, 0x7BEF, 0x7BCF};
+
+static void render_number(uint16_t v, uint8_t y0) {
+    if (v > 999) v = 999;
+    for (int8_t d = 2; d >= 0; d--, v /= 10) {
+        uint16_t bits = pgm_read_word(&digits[v % 10]);
+        for (uint8_t i = 0; i < 15; i++) {
+            if (!(bits & (0x4000 >> i))) continue;
+            uint8_t x = 4 + d * 8 + (i % 3) * 2, y = y0 + (i / 3) * 2;
+            oled_write_pixel(x, y, true);
+            oled_write_pixel(x + 1, y, true);
+            oled_write_pixel(x, y + 1, true);
+            oled_write_pixel(x + 1, y + 1, true);
         }
     }
+}
+
+static void render_trackpad_diag(void) {
+    uint16_t r[5] = {0};
+    bool     ok   = transaction_rpc_exec(TRACKPAD_DIAG_KEY, 0, NULL, sizeof(r), r);
+    oled_clear();
+    if (!ok) {
+        render_sym(G_MINUS, 6);
+        return;
+    }
+    for (uint8_t i = 0; i < 5; i++) render_number(r[i], 4 + i * 24);
 }
 #    endif
 
 void housekeeping_task_user(void) {
     if (is_keyboard_master()) mouse_sync_task();
-#    ifdef TRACKPAD_DIAG
-    trackpad_diag_task();
-#    endif
 }
 
 bool oled_task_user(void) {
@@ -461,7 +500,7 @@ bool oled_task_user(void) {
         oled_clear();
         render_sym(G_MINUS, 6);
     }
-    if (is_keyboard_master() && timer_elapsed(diag_timer) > 1000) {
+    if (is_keyboard_master() && timer_elapsed(diag_timer) > 200) {
         diag_timer = timer_read();
         render_trackpad_diag();
     }

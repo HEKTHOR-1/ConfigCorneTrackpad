@@ -11,6 +11,26 @@ index 04a4c9c7..2e455178 100644
      SRC += $(QUANTUM_DIR)/qmk_settings.c
      OPT_DEFS += -DQMK_SETTINGS \
          -DAUTO_SHIFT_NO_SETUP -DAUTO_SHIFT_REPEAT_PER_KEY -DAUTO_SHIFT_NO_AUTO_REPEAT_PER_KEY \
+diff --git a/drivers/sensors/cirque_pinnacle.c b/drivers/sensors/cirque_pinnacle.c
+index 893cb98b..cd5673f4 100644
+--- a/drivers/sensors/cirque_pinnacle.c
++++ b/drivers/sensors/cirque_pinnacle.c
+@@ -380,9 +380,15 @@ bool auto_mouse_activation(report_mouse_t mouse_report) {
+ }
+ #    endif
+ 
++#    ifdef CIRQUE_PINNACLE_EXPORT_TOUCH
++pinnacle_data_t cirque_last_touch; // cambio local: último dato crudo (sin escalar) para el keymap
++#    endif
+ report_mouse_t cirque_pinnacle_get_report(report_mouse_t mouse_report) {
+     uint16_t          scale     = cirque_pinnacle_get_scale();
+     pinnacle_data_t   touchData = cirque_pinnacle_read_data();
++#    ifdef CIRQUE_PINNACLE_EXPORT_TOUCH
++    cirque_last_touch = touchData;
++#    endif
+     mouse_xy_report_t report_x = 0, report_y = 0;
+     static uint16_t   x = 0, y = 0, last_scale = 0;
+ 
 diff --git a/quantum/qmk_settings.c b/quantum/qmk_settings.c
 index e5312d0f..3dd47e6a 100644
 --- a/quantum/qmk_settings.c
